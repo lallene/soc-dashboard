@@ -15,9 +15,8 @@ import {
   Legend,
 } from "recharts";
 
-  const socket = io(process.env.REACT_APP_API_URL, {
-    transports: ["websocket"],
-  });
+const API_URL = process.env.REACT_APP_API_URL;
+const socket = io(API_URL);
 
 function App() {
   const [data, setData] = useState(null);
@@ -73,7 +72,9 @@ function App() {
       setLoadingUpload(true);
       setMessage("");
 
-      const res = await fetch("http://127.0.0.1:5000/upload", {
+      const API_URL = process.env.REACT_APP_API_URL;
+
+      const res = await fetch(`${API_URL}/upload`, {
         method: "POST",
         body: formData,
       });
