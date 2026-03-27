@@ -1,0 +1,23 @@
+2026-03-27 11:00:01 [info] System boot sequence completed
+2026-03-27 11:05:22 [security] User 'lallene' logged in from 192.168.1.50
+2026-03-27 11:10:00 [cpu] 12.5
+2026-03-27 11:15:45 [info] GET /api/v1/status 200
+2026-03-27 11:20:00 [cpu] 15.2
+2026-03-27 11:25:10 [info] Backup task started
+2026-03-27 11:30:00 [cpu] 45.0
+2026-03-27 11:30:05 [info] Backup task completed successfully
+2026-03-27 11:35:00 [cpu] 18.1
+2026-03-27 11:40:12 [security] Failed password for user 'admin' from 45.12.33.10
+2026-03-27 11:40:15 [security] Failed password for user 'admin' from 45.12.33.10
+2026-03-27 11:40:18 [security] Failed password for user 'admin' from 45.12.33.10
+2026-03-27 11:40:21 [security] Failed password for user 'root' from 45.12.33.10
+2026-03-27 11:40:24 [security] Failed password for user 'support' from 45.12.33.10
+2026-03-27 11:41:00 [error] Multiple failed login attempts detected
+2026-03-27 11:45:00 [cpu] 88.7
+2026-03-27 11:45:10 [error] High memory pressure detected
+2026-03-27 11:46:00 [cpu] 94.2
+2026-03-27 11:47:05 [error] Service 'web_server' unresponsive
+2026-03-27 11:48:00 [cpu] 99.9
+2026-03-27 11:50:00 [info] Automatic scaling triggered: instance-02 started
+2026-03-27 11:55:00 [cpu] 35.4
+2026-03-27 11:58:12 [info] GET /dashboard 200

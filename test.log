@@ -1,0 +1,9 @@
+2026-03-27 11:00:01 [info] System boot sequence completed
+2026-03-27 11:05:22 [security] User 'lallene' logged in from 192.168.1.50
+2026-03-27 11:10:00 [cpu] 12.5
+2026-03-27 11:15:45 [info] GET /api/v1/status 200
+2026-03-27 11:20:00 [cpu] 15.2
+2026-03-27 11:25:10 [info] Backup task started
+2026-03-27 11:30:00 [cpu] 45.0
+2026-03-27 11:30:05 [info] Backup task completed successfully
+2026-03-27 11:35:00 [cpu] 18.1
