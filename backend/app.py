@@ -1,30 +1,29 @@
 from flask import Flask, jsonify, request
 from flask_cors import CORS
+from flask_socketio import SocketIO
+from collections import Counter
 import pickle
 import numpy as np
 import os
-from database import init_db
 import sqlite3
-from database import DB_PATH
-from collections import Counter
-from parser import parse_logs
-from flask_socketio import SocketIO
 
+from database import init_db, DB_PATH
+from parser import parse_logs
+
+# Initialisation base SQLite
 init_db()
-
-from parser import parse_logs
 
 app = Flask(__name__)
 CORS(app)
 socketio = SocketIO(app, cors_allowed_origins="*")
 
-# Base directory = dossier backend
+# Dossiers et fichiers
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(BASE_DIR, "data")
 MODEL_PATH = os.path.join(BASE_DIR, "model.pkl")
 LOG_PATH = os.path.join(DATA_DIR, "logs.txt")
 
-# Crée le dossier data s'il n'existe pas
+# Crée le dossier data si besoin
 os.makedirs(DATA_DIR, exist_ok=True)
 
 # Vérifie que le modèle existe
@@ -42,7 +41,10 @@ with open(MODEL_PATH, "rb") as f:
 def analyze_log_file(file_path, model):
     logs = parse_logs(file_path)
 
-    errors = sum(1 for l in logs if "error" in l.get("type", ""))
+    errors = sum(
+        1 for l in logs
+        if l.get("type") in ["app_error", "web_error", "error"]
+    )
     logins = sum(1 for l in logs if l.get("type") == "security")
     cpu_values = [l["value"] for l in logs if l.get("type") == "cpu"]
     cpu = max(cpu_values, default=0)
@@ -68,7 +70,7 @@ def analyze_log_file(file_path, model):
     recent_incidents = [
         l["raw"]
         for l in logs
-        if l.get("type") in ["app_error", "web_error", "security"]
+        if l.get("type") in ["app_error", "web_error", "security", "error"]
     ][-5:]
 
     if cpu >= 90 or security_events >= 5 or errors >= 3:
@@ -96,11 +98,28 @@ def analyze_log_file(file_path, model):
         "recent_incidents": recent_incidents,
     }
 
-@app.route("/")
+
+def save_analysis(errors, logins, cpu, anomaly):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+
+    cursor.execute(
+        """
+        INSERT INTO analysis (errors, logins, cpu, anomaly)
+        VALUES (?, ?, ?, ?)
+        """,
+        (errors, logins, cpu, anomaly),
+    )
+
+    conn.commit()
+    conn.close()
+
+
+@app.route("/", methods=["GET"])
 def home():
     return jsonify({
         "message": "API Monitoring IT OK",
-        "routes": ["/analyze", "/upload"]
+        "routes": ["/analyze", "/upload", "/history"]
     })
 
 
@@ -129,31 +148,21 @@ def upload():
     save_path = os.path.join(DATA_DIR, filename)
     file.save(save_path)
 
-    
-
     result = analyze_log_file(save_path, model)
-    save_analysis(result["errors"], result["logins"], result["cpu"], result["anomaly"])
+    save_analysis(
+        result["errors"],
+        result["logins"],
+        result["cpu"],
+        result["anomaly"]
+    )
 
     socketio.emit("analysis_update", result)
-
 
     return jsonify({
         "filename": filename,
         **result
     })
 
-
-def save_analysis(errors, logins, cpu, anomaly):
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-
-    cursor.execute("""
-        INSERT INTO analysis (errors, logins, cpu, anomaly)
-        VALUES (?, ?, ?, ?)
-    """, (errors, logins, cpu, anomaly))
-
-    conn.commit()
-    conn.close()
 
 @app.route("/history", methods=["GET"])
 def history():
@@ -164,7 +173,7 @@ def history():
     cursor = conn.cursor()
 
     query = """
-        SELECT timestamp, errors, logins, cpu, anomaly
+        SELECT id, timestamp, errors, logins, cpu, anomaly
         FROM analysis
     """
     params = []
@@ -181,33 +190,14 @@ def history():
 
     data = [
         {
-            "timestamp": row[0],
-            "errors": row[1],
-            "logins": row[2],
-            "cpu": row[3],
-            "anomaly": row[4],
+            "id": row[0],
+            "timestamp": row[1],
+            "errors": row[2],
+            "logins": row[3],
+            "cpu": row[4],
+            "anomaly": row[5],
         }
         for row in rows
-    ]
-
-    return jsonify(data)
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-
-    cursor.execute("SELECT timestamp, errors, logins, cpu, anomaly FROM analysis ORDER BY timestamp DESC LIMIT 20")
-    rows = cursor.fetchall()
-
-    conn.close()
-
-    data = [
-        {
-            "timestamp": r[0],
-            "errors": r[1],
-            "logins": r[2],
-            "cpu": r[3],
-            "anomaly": r[4]
-        }
-        for r in rows
     ]
 
     return jsonify(data)

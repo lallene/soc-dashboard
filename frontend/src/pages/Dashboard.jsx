@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from "react";
-import { getAnalysis, getHistory } from "./api";
+import { getAnalysis, getHistory } from "../api";
 import { io } from "socket.io-client";
 import {
   BarChart,
@@ -16,9 +16,9 @@ import {
 } from "recharts";
 
 const API_URL = process.env.REACT_APP_API_URL;
-const socket = io(API_URL);
+const socket = API_URL ? io(API_URL) : null;
 
-function App() {
+function Dashboard() {
   const [data, setData] = useState(null);
   const [history, setHistory] = useState([]);
   const [file, setFile] = useState(null);
@@ -71,8 +71,6 @@ function App() {
     try {
       setLoadingUpload(true);
       setMessage("");
-
-      const API_URL = process.env.REACT_APP_API_URL;
 
       const res = await fetch(`${API_URL}/upload`, {
         method: "POST",
@@ -142,10 +140,14 @@ function App() {
       }
     };
 
-    socket.on("analysis_update", handleAnalysisUpdate);
+    if (socket) {
+      socket.on("analysis_update", handleAnalysisUpdate);
+    }
 
     return () => {
-      socket.off("analysis_update", handleAnalysisUpdate);
+      if (socket) {
+        socket.off("analysis_update", handleAnalysisUpdate);
+      }
     };
   }, [currentSource, fetchData, fetchHistory, dateFrom, dateTo]);
 
@@ -502,4 +504,4 @@ function App() {
   );
 }
 
-export default App;
+export default Dashboard;
