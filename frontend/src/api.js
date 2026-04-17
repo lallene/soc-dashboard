@@ -1,6 +1,6 @@
 import axios from "axios";
 
-const API_URL = process.env.REACT_APP_API_URL;
+const API_URL = "http://localhost:5000";
 
 const api = axios.create({
   baseURL: API_URL,
@@ -22,7 +22,6 @@ export const getAnalysis = async () => {
 
 export const getHistory = async (dateFrom = "", dateTo = "") => {
   const params = {};
-
   if (dateFrom) params.from = dateFrom;
   if (dateTo) params.to = dateTo;
 
@@ -40,5 +39,10 @@ export const uploadLog = async (file) => {
     },
   });
 
+  return res.data;
+};
+
+export const getCVE = async (cveId) => {
+  const res = await api.get(`/cve/${cveId}`);
   return res.data;
 };

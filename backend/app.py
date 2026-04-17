@@ -6,6 +6,8 @@ import pickle
 import numpy as np
 import os
 import sqlite3
+import requests
+from deep_translator import GoogleTranslator
 
 from database import init_db, DB_PATH
 from parser import parse_logs
@@ -21,10 +23,12 @@ socketio = SocketIO(app, cors_allowed_origins="*")
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(BASE_DIR, "data")
 MODEL_PATH = os.path.join(BASE_DIR, "model.pkl")
+UPLOAD_FOLDER = os.path.join(BASE_DIR, "uploads")
 LOG_PATH = os.path.join(DATA_DIR, "logs.txt")
 
 # Crée le dossier data si besoin
 os.makedirs(DATA_DIR, exist_ok=True)
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 # Vérifie que le modèle existe
 if not os.path.exists(MODEL_PATH):
@@ -119,7 +123,7 @@ def save_analysis(errors, logins, cpu, anomaly):
 def home():
     return jsonify({
         "message": "API Monitoring IT OK",
-        "routes": ["/analyze", "/upload", "/history"]
+        "routes": ["/analyze", "/upload", "/history", "/cve/<cve_id>"]
     })
 
 
@@ -202,6 +206,109 @@ def history():
 
     return jsonify(data)
 
+
+
+def get_cve_data(cve_id):
+    url = f"https://services.nvd.nist.gov/rest/json/cves/2.0?cveId={cve_id}"
+    
+    try:
+        response = requests.get(url, timeout=10)
+        response.raise_for_status()
+        res_json = response.json()
+        
+        vulnerabilities = res_json.get("vulnerabilities", [])
+        if not vulnerabilities:
+            return {"id": cve_id, "summary": "CVE non trouvée", "cvss": "N/A", "references": []}
+
+        cve_item = vulnerabilities[0]["cve"]
+        
+        # --- Extraction des données existantes ---
+        descriptions = cve_item.get("descriptions", [])
+        summary = next((d["value"] for d in descriptions if d["lang"] == "en"), "No description")
+        
+        metrics = cve_item.get("metrics", {})
+        cvss_data = metrics.get("cvssMetricV31") or metrics.get("cvssMetricV30")
+        score = cvss_data[0]["cvssData"]["baseScore"] if cvss_data else "N/A"
+
+        # --- NOUVEAU : Extraction des Références ---
+        # On récupère les URLs dans la liste des références
+        refs_list = cve_item.get("references", [])
+        references = [r.get("url") for r in refs_list if r.get("url")]
+
+        data = {
+            "id": cve_id,
+            "summary": summary,
+            "cvss": score,
+            "published": cve_item.get("published", "N/A").split("T")[0],
+            "references": references # Ajout au dictionnaire
+        }
+
+        # Traduction
+        data['summary_fr'] = GoogleTranslator(source='en', target='fr').translate(data['summary'])
+
+    except Exception as e:
+        print(f"Erreur API : {e}")
+        data = {
+            "id": cve_id, 
+            "summary": "Erreur réseau", 
+            "summary_fr": "Impossible de joindre la base NVD.",
+            "references": []
+        }
+
+    return data
+
+@app.route("/cve/<cve_id>", methods=["GET"])
+def cve_endpoint(cve_id):
+    result = get_cve_data(cve_id)
+    return jsonify(result)
+
+def analyze_pcap_deep(file_path):
+    packets = rdpcap(file_path)
+    flows = []
+    
+    for pkt in packets:
+        if IP in pkt:
+            src = pkt[IP].src
+            dst = pkt[IP].dst
+            proto = "TCP" if TCP in pkt else "UDP" if UDP in pkt else "Other"
+            
+            # On cherche spécifiquement le port 1234 ou 21
+            port = None
+            if TCP in pkt: port = pkt[TCP].dport
+            elif UDP in pkt: port = pkt[UDP].dport
+            
+            if port in [21, 1234]:
+                flows.append({"src": src, "dst": dst, "port": port, "proto": proto})
+
+    # On ne garde que les 10 plus pertinents pour l'affichage
+    return flows[:10]
+@app.route("/upload_pcap", methods=["POST"])
+def upload_pcap():
+    try:
+        if 'file' not in request.files:
+            return jsonify({"error": "Aucun fichier détecté"}), 400
+        
+        file = request.files['file']
+        filename = os.path.basename(file.filename)
+        path = os.path.join(UPLOAD_FOLDER, filename) # <-- Utilise la variable globale
+        file.save(path)
+        
+        from pcap_analyzer import analyze_pcap
+        result = analyze_pcap(path)
+        
+        if "error" in result:
+            return jsonify(result), 500
+            
+        return jsonify(result)
+
+    except Exception as e:
+        print(f"CRASH SERVEUR: {str(e)}")
+        return jsonify({"error": f"Erreur interne : {str(e)}"}), 500
+
+    except Exception as e:
+        # Capture toutes les autres erreurs (permissions, crash Scapy, etc.)
+        print(f"CRASH SERVEUR: {str(e)}")
+        return jsonify({"error": f"Erreur interne du serveur: {str(e)}"}), 500
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
